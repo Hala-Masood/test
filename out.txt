@@ -1,0 +1,78 @@
+#!/bin/bash
+
+clear # to clear the screen
+
+# Starting notes
+echo "###################################################"
+echo "***Script for Installing the Desired Stack***"
+echo "###################################################"
+
+echo "Please enter the required credentials"
+
+#Taking Input from User
+read -p "Enter SSH Username: " username_ssh
+read -p "Enter Public IP of the server: " public_ip
+read -p "Enter SSH Password: " password_ssh
+
+sshpass -p $password_ssh ssh $username_ssh@$public_ip <<EOF
+
+sudo apt update
+sudo apt upgrade
+sudo apt install nginx -y
+sudo systemctl start nginx
+sudo rm default
+echo "server {
+        listen 80;
+        root /var/www/taha.com;
+        index index.php index.html index.htm index.nginx-debian.html;
+        server_name taha.com www.taha.com;
+
+        location / {
+                proxy_pass http://task;
+                proxy_set_header Host \$host;
+                proxy_set_header X-Real-IP \$remote_addr;
+                proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto \$scheme;
+#               proxy_hide_header Cache-Provider;
+#               proxy_hide_header Age;
+#               proxy_hide_header X-Varnish;
+#               proxy_hide_header Link;
+#               proxy_hide_header Expires;
+#               proxy_hide_header Cache-Control;
+                #try_files $uri $uri/ =404;
+        }
+
+        location ~ \.php$ {
+                include snippets/fastcgi-php.conf;
+                fastcgi_pass unix:/var/run/php/php7.4-fpm.sock;
+        }
+}" | sudo tee /etc/nginx/sites-available/taha.com
+
+echo "upstream task {
+        server 127.0.0.1:8080 max_fails=3 fail_timeout=3s weight=5;
+        server 127.0.0.1:8081 backup;
+
+}" | sudo tee /etc/nginx/conf.d/task.conf
+
+
+sudo mkdir /var/www/taha.com
+
+sudo apt install apache2 -y
+sudo mv /etc/apache2/ports.conf /etc/apache2/ports.conf.default
+echo "Listen 8081" | sudo tee /etc/apache2/ports.conf
+sudo systemctl start apache2
+sudo a2dissite 000-default
+echo "<VirtualHost *:8081>
+    ServerAdmin webmaster@localhost
+    DocumentRoot /var/www/html
+    ErrorLog ${APACHE_LOG_DIR}/error.log
+    CustomLog ${APACHE_LOG_DIR}/access.log combined
+</VirtualHost>" | sudo tee /etc/apache2/sites-available/001-default.conf
+sudo systemctl reload apache2
+sudo apt install varnish -y
+
+
+
+
+
+
